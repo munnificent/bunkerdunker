@@ -1,8 +1,8 @@
 # main.py
 
-import telebot
 import logging
 import time
+from telebot import TeleBot
 from telebot.types import Message, CallbackQuery
 
 from config import TOKEN
@@ -22,10 +22,26 @@ logging.basicConfig(
     encoding='utf-8'
 )
 
-bot = telebot.TeleBot(TOKEN)
+bot = TeleBot(TOKEN)
 
 # Словарь для отслеживания времени последнего действия пользователя (для защиты от спама)
 user_last_action = {}
+
+
+# --- Глобальный обработчик ошибок ---
+def handle_errors(exception: Exception):
+    """
+    Глобальный обработчик для всех непредвиденных ошибок.
+    Логирует ошибку и предотвращает падение бота.
+    """
+    logging.error(f"Произошла непредвиденная ошибка: {exception}", exc_info=True)
+    # В реальном проекте можно добавить отправку уведомления администратору
+    return True # Говорим библиотеке, что ошибка обработана и можно продолжать работу
+
+# Присваиваем нашу функцию-обработчик боту.
+# Это правильный способ регистрации, вместо декоратора.
+bot.exception_handler = handle_errors
+
 
 # --- Декораторы и вспомогательные функции ---
 
@@ -48,6 +64,7 @@ def rate_limit(limit_seconds: int):
             return func(message, *args, **kwargs)
         return wrapper
     return decorator
+
 
 # --- Регистрация обработчиков ---
 
@@ -89,12 +106,6 @@ def register_command_handlers():
 def handle_vote_callback(call: CallbackQuery):
     admin_handlers.handle_vote_callback(bot, call)
 
-# Глобальный обработчик ошибок для повышения стабильности бота
-@bot.exception_handler
-def handle_errors(exception: Exception):
-    logging.error(f"Произошла ошибка: {exception}", exc_info=True)
-    # В реальном проекте можно добавить отправку уведомления администратору
-    return True # Продолжаем работу
 
 # --- Запуск бота ---
 

@@ -6,11 +6,11 @@ from typing import List
 
 from sqlalchemy.orm import Session, joinedload
 from telebot import TeleBot
-from telebot.types import Message, APIError
+from telebot.types import Message
 
 # Импортируем декораторы из других модулей, чтобы не дублировать код
 from handlers.create_room_handler import player_required
-from handlers.chat_handlers import player_in_room_required, _broadcast_to_room
+from handlers.chat_handlers import player_in_room_required
 from models import Player, Room, Characteristic, PlayerAchievement
 
 
@@ -81,7 +81,7 @@ def handle_leave_room(bot: TeleBot, message: Message, session: Session, player: 
     for p in other_players:
         try:
             bot.send_message(p.telegram_id, notification_text, parse_mode='HTML')
-        except APIError as e:
+        except Exception as e: # <-- Заменено на общее исключение
             logging.warning(f"Не удалось уведомить игрока {p.id} о выходе {player.id}: {e}")
 
     # Убираем игрока из комнаты

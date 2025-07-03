@@ -8,7 +8,7 @@ from typing import List
 
 from sqlalchemy.orm import Session
 from telebot import TeleBot
-from telebot.types import Message, CallbackQuery, APIError
+from telebot.types import Message, CallbackQuery
 
 from database import Session as DbSession
 from models import Player, Room, Vote, Characteristic
@@ -75,7 +75,7 @@ def _broadcast_message(bot: TeleBot, players: List[Player], text: str, **kwargs)
     for p in players:
         try:
             bot.send_message(p.telegram_id, text, **kwargs)
-        except APIError as e:
+        except Exception as e: # <-- Заменено на общее исключение
             logging.error(f"Не удалось отправить сообщение игроку {p.id} ({p.username}): {e}")
 
 # --- Обработчики команд ---

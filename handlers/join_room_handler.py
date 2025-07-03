@@ -2,7 +2,7 @@
 
 import logging
 from telebot import TeleBot
-from telebot.types import Message, APIError
+from telebot.types import Message
 
 # Импортируем уже созданный декоратор для переиспользования кода
 from handlers.create_room_handler import player_required
@@ -54,7 +54,7 @@ def handle_join_room(bot: TeleBot, message: Message, session: Session, player: P
         if p.id != player.id:
             try:
                 bot.send_message(p.telegram_id, notification_text, parse_mode='HTML')
-            except APIError as e:
+            except Exception as e: # <-- Заменено на общее исключение
                 logging.warning(f"Не удалось уведомить игрока {p.id} о входе {player.id}: {e}")
 
     bot.send_message(message.chat.id, f"✅ Вы успешно присоединились к комнате <code>{room_code}</code>!", parse_mode='HTML')

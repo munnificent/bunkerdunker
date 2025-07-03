@@ -6,7 +6,7 @@ from typing import List
 
 from sqlalchemy.orm import Session
 from telebot import TeleBot
-from telebot.types import Message, APIError
+from telebot.types import Message
 
 from database import Session as DbSession
 from models import Player, Room, Message as MessageModel
@@ -63,7 +63,7 @@ def _broadcast_to_room(bot: TeleBot, sender: Player, room: Room, text: str):
         if p.id != sender.id:
             try:
                 bot.send_message(p.telegram_id, full_message, parse_mode='HTML')
-            except APIError as e:
+            except Exception as e: # <-- Заменено на общее исключение
                 logging.error(f"Не удалось отправить сообщение игроку {p.id} ({p.username}): {e}")
 
 # --- Обработчики команд ---
@@ -127,6 +127,6 @@ def handle_send_private_message(bot: TeleBot, message: Message, session: Session
         private_text = f"🔒 <b>Приватное сообщение от {player.username}:</b> {text}"
         bot.send_message(recipient.telegram_id, private_text, parse_mode='HTML')
         bot.send_message(message.chat.id, f"✅ Приватное сообщение для <b>{recipient_username}</b> отправлено.", parse_mode='HTML')
-    except APIError as e:
+    except Exception as e: # <-- Заменено на общее исключение
         logging.error(f"Не удалось отправить приватное сообщение от {player.username} к {recipient.username}: {e}")
         bot.send_message(message.chat.id, f"❌ Не удалось доставить сообщение игроку <b>{recipient_username}</b>. Возможно, он заблокировал бота.", parse_mode='HTML')
