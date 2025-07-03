@@ -1,34 +1,43 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" style="scroll-behavior: smooth;">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <meta name="description" content="Телеграм-бот для игры 'Бункер'. Окунитесь в атмосферу выживания и стратегических решений!"/>
-    <title>Игра "Бункер"</title>
+    <meta name="description" content="Телеграм-бот для настольной игры 'Бункер'. Погрузитесь в атмосферу выживания и стратегических решений в постапокалиптическом мире."/>
+    <title>Игра 'Бункер' — Телеграм-бот</title>
+    
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <!-- Шрифты и иконки -->
+    
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 
-    <!-- Materialize CSS -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css"/>
 
     <style>
+        :root {
+            --primary-bg: #212121;
+            --secondary-bg: #2b2b2b;
+            --primary-text: #e0e0e0;
+            --secondary-text: #b0bec5;
+            --accent-color: #8bc34a;
+            --accent-color-dark: #388e3c;
+            --accent-color-dark-hover: #2e7d32;
+        }
+
         body {
             margin: 0;
             padding: 0;
             font-family: 'Roboto', sans-serif;
-            background: #212121;
-            color: #e0e0e0;
+            background-color: var(--primary-bg);
+            color: var(--primary-text);
         }
 
-        /* Общий стиль в духе бункера: тёмный фон, приглушённые цвета */
         .banner {
-            background: linear-gradient(to bottom, rgba(33,33,33,0.7), rgba(33,33,33,0.7));
+            background: linear-gradient(to bottom, rgba(33,33,33,0.8), rgba(33,33,33,0.8));
             background-size: cover;
             background-position: center;
             text-align: center;
-            padding: 80px 20px;
+            padding: 60px 20px;
         }
 
         .banner h1 {
@@ -41,15 +50,17 @@
         .banner p {
             font-size: 1.2rem;
             margin-bottom: 30px;
-            color: #b0bec5;
+            color: var(--secondary-text);
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
         }
 
         .banner .cta-btn {
-            background: #388e3c;
-            margin-top: 20px;
+            background-color: var(--accent-color-dark);
         }
         .banner .cta-btn:hover {
-            background: #2e7d32;
+            background-color: var(--accent-color-dark-hover);
         }
 
         .section {
@@ -58,198 +69,168 @@
 
         .section h3 {
             font-weight: 500;
-            margin-bottom: 30px;
+            margin-bottom: 40px;
             text-align: center;
         }
 
         .card {
-            background: #2b2b2b;
+            background-color: var(--secondary-bg);
             border-radius: 8px;
         }
 
-        .card-content p {
-            color: #e0e0e0;
-        }
-
         .collapsible-header {
-            background: #333;
+            background-color: #333;
             border-bottom: 1px solid #444;
+            color: var(--primary-text);
         }
 
         .collapsible-header i {
-            color: #8bc34a;
-        }
-
-        .collapsible-header, .collapsible-body {
-            color: #e0e0e0;
+            color: var(--accent-color);
         }
 
         .collapsible-body {
-            background: #1e1e1e;
+            background-color: #1e1e1e;
+            color: var(--primary-text);
+            border-bottom: none;
         }
 
-        .rules-list li::before {
+        .rules-list li::before, .commands-list li::before {
             content: "✦ ";
-            color: #8bc34a;
+            color: var(--accent-color);
             font-weight: bold;
         }
 
-        .commands-list li::before {
-            content: "• ";
-            color: #8bc34a;
-            font-weight: bold;
-        }
-
-        footer {
-            background: #1c1c1c;
-            color: #b0bec5;
-            text-align: center;
+        .page-footer {
+            background-color: #1c1c1c;
+            color: var(--secondary-text);
             padding: 20px;
-            font-size: 0.9rem;
         }
 
-        /* Адаптация под мобильные устройства */
-        @media (max-width: 600px) {
-            .banner h1 {
-                font-size: 2rem;
-            }
-            .banner p {
-                font-size: 1rem;
-            }
-        }
-
-        /* Стиль для кнопки "Наверх" */
         .btn-floating.btn-large {
             position: fixed;
             bottom: 20px;
             right: 20px;
-            z-index: 1000;
-            background: #388e3c;
+            z-index: 999;
+            background-color: var(--accent-color-dark);
         }
         .btn-floating.btn-large:hover {
-            background: #2e7d32;
+            background-color: var(--accent-color-dark-hover);
         }
-
-        /* Анимация при появлении контента (опционально) */
-        .fade-enter {
-            opacity: 0;
-            transform: translateY(10px);
-        }
-        .fade-enter.fade-enter-active {
-            opacity: 1;
-            transform: translateY(0);
-            transition: all 0.3s ease;
+        
+        @media (max-width: 600px) {
+            .banner { padding: 40px 15px; }
+            .banner h1 { font-size: 2rem; }
+            .banner p { font-size: 1rem; }
+            .section { padding: 30px 15px; }
         }
     </style>
 </head>
 <body>
+    <a id="top"></a>
+    
     <header class="banner">
-        <h1>Игра "Бункер"</h1>
-        <p>Постапокалиптический эксперимент выживания — теперь с нашим Телеграм-ботом! Соберите команду, распределите роли и решайте, кто достоин остаться.</p>
-        <button class="waves-effect waves-light btn-large cta-btn" id="startGameBtn">Начать играть</button>
+        <div class="container">
+            <h1>Игра "Бункер"</h1>
+            <p>Постапокалиптический эксперимент на выживание — теперь с нашим Телеграм-ботом! Соберите команду, распределите роли и решите, кто достоин остаться.</p>
+            <button class="waves-effect waves-light btn-large cta-btn" id="startGameBtn">
+                <i class="material-icons left">play_arrow</i>Начать играть
+            </button>
+        </div>
     </header>
 
-    <main>
+    <main role="main">
         <section class="section intro-section">
-            <h3>О игре</h3>
-            <div class="card">
-                <div class="card-content">
-                    <p>«Бункер» — это игра о выживании в замкнутом пространстве после катастрофы. Каждому игроку генерируется уникальный персонаж со своими умениями, здоровьем, хобби, багажом, фактами, фобиями, талантами и статусом. Задача — убедить остальных в своей значимости для группы, чтобы остаться в убежище, пока не достигнута нужная численность выживших.</p>
-                    <p>Наш бот автоматизирует весь процесс: создание комнат, генерация персонажей, обсуждения, голосования, таймеры и подсчёт результатов. Никаких ручных записей — всё в одном удобном Телеграм-приложении!</p>
+            <div class="container">
+                <h3>О игре</h3>
+                <div class="card">
+                    <div class="card-content">
+                        <p>«Бункер» — это игра о выживании в замкнутом пространстве после катастрофы. Каждому игроку генерируется уникальный персонаж со своими умениями, здоровьем, хобби, багажом и другими характеристиками. Задача — убедить остальных в своей ценности для группы, чтобы остаться в убежище.</p>
+                        <p>Наш бот автоматизирует весь процесс: создание комнат, генерация персонажей, обсуждения, голосования и подсчёт результатов. Никаких ручных записей — всё в одном удобном Телеграм-приложении!</p>
+                    </div>
                 </div>
             </div>
         </section>
 
         <section class="section rules-section">
-            <h3>Правила и управление ботом</h3>
-            <ul class="collapsible">
-                <li>
-                    <div class="collapsible-header"><i class="material-icons">info</i>Правила игры</div>
-                    <div class="collapsible-body">
-                        <p>Игроки оказываются в условном «бункере» после глобальной катастрофы. У каждого есть уникальные данные. После нескольких раундов обсуждений и голосований исключаются те, кто, по мнению группы, не нужен для выживания. Игра идёт до тех пор, пока не останется требуемое число выживших.</p>
-                        <ul class="rules-list">
-                            <li>Изучайте свои характеристики и аргументируйте свою полезность.</li>
-                            <li>Обсуждайте стратегию и распределение ролей.</li>
-                            <li>Голосуйте за тех, кто, по вашему мнению, не принесёт пользу.</li>
-                            <li>Выигрывают те, кто остаётся в конце.</li>
-                        </ul>
-                    </div>
-                </li>
-                <li>
-                    <div class="collapsible-header"><i class="material-icons">help</i>Команды бота</div>
-                    <div class="collapsible-body">
-                        <p>Используйте команды для взаимодействия с ботом:</p>
-                        <ul class="commands-list">
-                            <li><b>/start</b> — регистрация игрока.</li>
-                            <li><b>/help</b> — список команд.</li>
-                            <li><b>/create_room</b> — создать комнату (хост).</li>
-                            <li><b>/join_room [код]</b> — присоединиться к комнате.</li>
-                            <li><b>/leave_room</b> — покинуть комнату.</li>
-                            <li><b>/start_game</b> — начать игру (хост).</li>
-                            <li><b>/stop_game</b> — завершить игру (хост).</li>
-                            <li><b>/kick [username]</b> — исключить игрока (хост).</li>
-                            <li><b>/vote</b> — проголосовать за исключение.</li>
-                            <li><b>/show_status</b> — показать свои характеристики.</li>
-                            <li><b>/timer [минуты]</b> — запустить таймер обсуждения (хост).</li>
-                            <li><b>/rating</b> — показать рейтинг.</li>
-                            <li><b>/achievements</b> — показать достижения.</li>
-                            <li><b>/msg [сообщение]</b> — сообщение всем игрокам.</li>
-                            <li><b>/pm [username] [сообщение]</b> — приватное сообщение игроку.</li>
-                        </ul>
-                        <p>Следуйте командам и пусть победит сильнейший!</p>
-                    </div>
-                </li>
-            </ul>
+            <div class="container">
+                <h3>Правила и управление ботом</h3>
+                <ul class="collapsible">
+                    <li>
+                        <div class="collapsible-header"><i class="material-icons" aria-hidden="true">info_outline</i>Правила игры</div>
+                        <div class="collapsible-body">
+                            <p>Игроки оказываются в условном «бункере» после глобальной катастрофы. После нескольких раундов обсуждений и голосований исключаются те, кто, по мнению группы, наименее полезен. Игра идёт до тех пор, пока не останется требуемое число выживших.</p>
+                            <ul class="rules-list">
+                                <li>Изучайте свои характеристики и аргументируйте свою полезность.</li>
+                                <li>Обсуждайте стратегию и распределение ролей.</li>
+                                <li>Голосуйте за тех, кто, по вашему мнению, не принесёт пользу.</li>
+                                <li>Выигрывают те, кто остаётся в конце.</li>
+                            </ul>
+                        </div>
+                    </li>
+                    <li>
+                        <div class="collapsible-header"><i class="material-icons" aria-hidden="true">help_outline</i>Команды бота</div>
+                        <div class="collapsible-body">
+                            <p>Используйте команды для взаимодействия с ботом:</p>
+                            <ul class="commands-list">
+                                <li><b>/start</b> — регистрация игрока.</li>
+                                <li><b>/help</b> — список команд.</li>
+                                <li><b>/create_room</b> — создать комнату (хост).</li>
+                                <li><b>/join_room [код]</b> — присоединиться к комнате.</li>
+                                <li><b>/leave_room</b> — покинуть комнату.</li>
+                                <li><b>/start_game</b> — начать игру (хост).</li>
+                                <li><b>/vote</b> — проголосовать за исключение.</li>
+                                <li><b>/msg [сообщение]</b> — сообщение всем игрокам.</li>
+                                <li><b>/pm [username] [сообщение]</b> — приватное сообщение игроку.</li>
+                            </ul>
+                            <p>Следуйте командам и пусть победит сильнейший!</p>
+                        </div>
+                    </li>
+                </ul>
+            </div>
         </section>
     </main>
 
-    <footer>
-        <p>© 2024 Игра "Бункер"</p>
-        <p>ШизаПроджект не ответственна за это</p>
+    <footer class="page-footer">
+        <div class="container">
+            © 2024-2025 Игра "Бункер" | ШизаПроджект
+        </div>
     </footer>
 
-    <!-- Кнопка "Наверх" -->
-    <a class="btn-floating btn-large waves-effect waves-light" href="#top" style="display:flex;align-items:center;justify-content:center;">
-        <i class="material-icons">arrow_upward</i>
+    <a class="btn-floating btn-large waves-effect waves-light" href="#top" aria-label="Вернуться к началу страницы">
+        <i class="material-icons" aria-hidden="true">arrow_upward</i>
     </a>
 
-    <!-- Materialize JS -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
-    <!-- Telegram WebApp Integration -->
+    
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            // Инициализация Materialize компонентов
-            var collapsibles = document.querySelectorAll('.collapsible');
+        document.addEventListener('DOMContentLoaded', () => {
+            // Инициализация компонентов Materialize
+            const collapsibles = document.querySelectorAll('.collapsible');
             M.Collapsible.init(collapsibles);
 
-            // Проверяем доступность Telegram WebApp API
-            if (typeof Telegram !== 'undefined' && Telegram.WebApp) {
-                const webApp = Telegram.WebApp;
+            const botUrl = "https://t.me/bunkerdunker_bot";
 
-                // Делаем WebApp готовым
+            // Интеграция с Telegram WebApp
+            if (window.Telegram && window.Telegram.WebApp) {
+                const webApp = window.Telegram.WebApp;
                 webApp.ready();
-
-                // Настраиваем тему в зависимости от Telegram
-                const tgTheme = webApp.themeParams;
-                // Можно использовать tgTheme для адаптации стилей, если нужно
-
-                // Устанавливаем основной текст кнопки в нижней части (main button)
+                
                 webApp.MainButton.setText("Присоединиться к боту");
                 webApp.MainButton.show();
-                webApp.MainButton.onClick(() => {
-                    // При нажатии на основную кнопку открываем ссылку на бота
-                    webApp.openLink("https://t.me/bunkerdunker_bot");
-                });
+                webApp.MainButton.onClick(() => webApp.openLink(botUrl));
             }
 
-            // Поведение кнопки "Начать играть" на баннере
-            document.getElementById('startGameBtn').addEventListener('click', () => {
-                if (typeof Telegram !== 'undefined' && Telegram.WebApp) {
-                    Telegram.WebApp.openLink("https://t.me/bunkerdunker_bot");
-                } else {
-                    window.open("https://t.me/bunkerdunker_bot", "_blank");
-                }
-            });
+            // Обработчик для основной кнопки "Начать играть"
+            const startGameBtn = document.getElementById('startGameBtn');
+            if (startGameBtn) {
+                startGameBtn.addEventListener('click', () => {
+                    if (window.Telegram && window.Telegram.WebApp) {
+                        window.Telegram.WebApp.openLink(botUrl);
+                    } else {
+                        window.open(botUrl, "_blank");
+                    }
+                });
+            }
         });
     </script>
 </body>

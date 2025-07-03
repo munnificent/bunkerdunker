@@ -1,56 +1,62 @@
 # handlers/join_room_handler.py
 
-from database import Session
-from models import Player, Room
 import logging
+from telebot import TeleBot
+from telebot.types import Message, APIError
 
-def handle_join_room(bot, message):
-    logging.info(f"Пользователь {message.from_user.id} вызвал команду /join_room")
-    session = Session()
+# Импортируем уже созданный декоратор для переиспользования кода
+from handlers.create_room_handler import player_required
+from models import Player, Room
+from sqlalchemy.orm import Session
+
+# --- Обработчик команды ---
+
+@player_required
+def handle_join_room(bot: TeleBot, message: Message, session: Session, player: Player):
+    """
+    Обрабатывает команду /join_room.
+    Позволяет игроку присоединиться к существующей комнате по коду.
+    """
+    logging.info(f"Игрок {player.username} ({player.id}) пытается присоединиться к комнате.")
+
+    if player.current_room_id:
+        bot.send_message(message.chat.id, "❗ Вы уже находитесь в комнате. Сначала покиньте ее с помощью /leave_room.")
+        return
+
     try:
-        telegram_id = message.from_user.id
-        username = message.from_user.username or message.from_user.first_name
+        room_code = message.text.split()[1]
+    except IndexError:
+        bot.send_message(message.chat.id, "❗ Укажите код комнаты после команды. Пример: /join_room ABC123")
+        return
 
-        player = session.query(Player).filter_by(telegram_id=telegram_id).first()
-        if not player:
-            player = Player(telegram_id=telegram_id, username=username)
-            session.add(player)
-            session.commit()
+    # Ищем комнату по коду
+    room = session.query(Room).filter_by(code=room_code).first()
 
-        if player.current_room_id:
-            bot.send_message(message.chat.id, "❗ Вы уже находитесь в комнате. Сначала покиньте ее с помощью /leave_room.")
-            return
+    # Последовательно проверяем все условия
+    if not room:
+        bot.send_message(message.chat.id, f"❗ Комната с кодом <code>{room_code}</code> не найдена.", parse_mode='HTML')
+        return
 
-        try:
-            room_code = message.text.split()[1]
-        except IndexError:
-            bot.send_message(message.chat.id, "❗ Пожалуйста, укажите код комнаты после команды.")
-            return
+    if not room.is_active:
+        bot.send_message(message.chat.id, "❗ Эта игра уже завершена. Нельзя присоединиться.")
+        return
 
-        room = session.query(Room).filter_by(code=room_code).first()
-        if not room:
-            bot.send_message(message.chat.id, "❗ Комната с таким кодом не найдена.")
-            return
+    if len(room.players) >= room.max_players:
+        bot.send_message(message.chat.id, "❗ К сожалению, эта комната уже заполнена.")
+        return
 
-        if not room.is_active:
-            bot.send_message(message.chat.id, "❗ Эта комната больше не активна.")
-            return
+    # Если все проверки пройдены, добавляем игрока
+    player.room = room  # SQLAlchemy автоматически установит player.current_room_id
+    
+    # Уведомляем всех в комнате о новом игроке
+    notification_text = f"👤 Игрок <b>{player.username}</b> присоединился к комнате!"
+    for p in room.players:
+        if p.id != player.id:
+            try:
+                bot.send_message(p.telegram_id, notification_text, parse_mode='HTML')
+            except APIError as e:
+                logging.warning(f"Не удалось уведомить игрока {p.id} о входе {player.id}: {e}")
 
-        if len(room.players) >= room.max_players:
-            bot.send_message(message.chat.id, "❗ Комната заполнена.")
-            return
-
-        room.players.append(player)
-        player.current_room_id = room.id
-        session.commit()
-
-        bot.send_message(message.chat.id, f"🔑 Вы присоединились к комнате <code>{room_code}</code>!", parse_mode='HTML')
-        for p in room.players:
-            if p.telegram_id != telegram_id:
-                bot.send_message(p.telegram_id, f"👤 Игрок <b>{player.username}</b> присоединился к комнате.", parse_mode='HTML')
-    except Exception as e:
-        session.rollback()
-        bot.send_message(message.chat.id, "Произошла ошибка при присоединении к комнате.")
-        logging.error(f"Ошибка в handle_join_room: {e}")
-    finally:
-        session.close()
+    bot.send_message(message.chat.id, f"✅ Вы успешно присоединились к комнате <code>{room_code}</code>!", parse_mode='HTML')
+    logging.info(f"Игрок {player.username} присоединился к комнате {room.code}.")
+    # Декоратор сам выполнит session.commit()

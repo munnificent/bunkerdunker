@@ -1,31 +1,35 @@
 # handlers/start_handler.py
 
-from database import Session
-from models import Player
 import logging
+from telebot import TeleBot
+from telebot.types import Message
+from sqlalchemy.orm import Session
 
-def handle_start(bot, message):
-    logging.info(f"Пользователь {message.from_user.id} вызвал команду /start")
-    session = Session()
-    try:
-        telegram_id = message.from_user.id
-        username = message.from_user.username or message.from_user.first_name
+# Импортируем уже созданный декоратор для переиспользования кода
+from handlers.create_room_handler import player_required
+from models import Player
 
-        player = session.query(Player).filter_by(telegram_id=telegram_id).first()
-        if not player:
-            player = Player(telegram_id=telegram_id, username=username)
-            session.add(player)
-            session.commit()
 
-        bot.send_message(
-            message.chat.id,
-            f"👋 Привет, <b>{username}</b>! Добро пожаловать в игру <b>'Бункер'</b>.\n\n"
-            "Используйте /help для просмотра команд.",
-            parse_mode='HTML'
-        )
-    except Exception as e:
-        session.rollback()
-        bot.send_message(message.chat.id, "Произошла ошибка при обработке вашего запроса.")
-        logging.error(f"Ошибка в handle_start: {e}")
-    finally:
-        session.close()
+# --- Обработчик команды ---
+
+@player_required
+def handle_start(bot: TeleBot, message: Message, session: Session, player: Player):
+    """
+    Обрабатывает команду /start.
+
+    Регистрирует нового пользователя или приветствует существующего.
+    Декоратор @player_required управляет созданием/поиском игрока и сессией БД.
+    """
+    logging.info(f"Игрок {player.username} ({player.id}) запустил бота.")
+    
+    welcome_text = (
+        f"👋 Привет, <b>{player.username}</b>! Добро пожаловать в игру <b>'Бункер'</b>.\n\n"
+        "Я помогу вам провести игру: раздам характеристики, проведу голосование и определю победителей.\n\n"
+        "Используйте /help, чтобы увидеть список всех доступных команд."
+    )
+    
+    bot.send_message(
+        message.chat.id,
+        welcome_text,
+        parse_mode='HTML'
+    )

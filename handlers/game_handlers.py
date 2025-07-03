@@ -1,127 +1,124 @@
 # handlers/game_handlers.py
 
-from database import Session
-from models import Player, Room, Characteristic, Vote, Location, Achievement, PlayerAchievement
-from utils.game_utils import (
-    get_random_event
-)
-from utils.markup_utils import create_voting_buttons
-from utils.achievement_utils import check_and_award_achievements
-from telebot.types import Message
 import logging
+from functools import wraps
+from typing import List
 
-def handle_show_status(bot, message):
-    logging.info(f"Пользователь {message.from_user.id} вызвал команду /show_status")
-    session = Session()
-    try:
-        telegram_id = message.from_user.id
-        player = session.query(Player).filter_by(telegram_id=telegram_id).first()
-        if not player:
-            bot.send_message(message.chat.id, "❗ Вы не зарегистрированы. Используйте /start для начала.")
-            return
+from sqlalchemy.orm import Session, joinedload
+from telebot import TeleBot
+from telebot.types import Message, APIError
 
-        characteristics = session.query(Characteristic).filter_by(player_id=player.id).first()
-        if not characteristics:
-            bot.send_message(message.chat.id, "❗ У вас нет характеристик.")
-            return
+# Импортируем декораторы из других модулей, чтобы не дублировать код
+from handlers.create_room_handler import player_required
+from handlers.chat_handlers import player_in_room_required, _broadcast_to_room
+from models import Player, Room, Characteristic, PlayerAchievement
 
-        char_text = f"""
-<b>Ваши характеристики:</b>
-👤 <b>Профессия:</b> {characteristics.profession}
-🧬 <b>Биология:</b> {characteristics.biology}
-❤️ <b>Здоровье:</b> {characteristics.health}
-🎨 <b>Хобби:</b> {characteristics.hobby}
-🎒 <b>Багаж:</b> {characteristics.luggage}
-📜 <b>Факт:</b> {characteristics.facts}
-😱 <b>Фобия:</b> {characteristics.phobia}
-✨ <b>Талант:</b> {characteristics.talent}
-🏷️ <b>Социальный статус:</b> {characteristics.social_status}
-"""
-        bot.send_message(message.chat.id, char_text, parse_mode='HTML')
-    except Exception as e:
-        bot.send_message(message.chat.id, "Произошла ошибка при получении ваших характеристик.")
-        logging.error(f"Ошибка в handle_show_status: {e}")
-    finally:
-        session.close()
 
-def handle_leave_room(bot, message):
-    logging.info(f"Пользователь {message.from_user.id} вызвал команду /leave_room")
-    session = Session()
-    try:
-        telegram_id = message.from_user.id
-        player = session.query(Player).filter_by(telegram_id=telegram_id).first()
+# --- Вспомогательные функции ---
 
-        if not player or not player.current_room_id:
-            bot.send_message(message.chat.id, "❗ Вы не находитесь в комнате.")
-            return
+def _get_player_characteristics_text(player: Player) -> str:
+    """Формирует и возвращает текст с характеристиками игрока."""
+    characteristics = player.characteristics
+    if not characteristics:
+        return "❗ У вас пока нет характеристик. Их выдадут в начале игры."
 
-        room = session.query(Room).filter_by(id=player.current_room_id).first()
-        room.players.remove(player)
-        player.current_room_id = None
+    return (
+        f"<b>Ваши текущие характеристики:</b>\n\n"
+        f"👤 <b>Профессия:</b> {characteristics.profession}\n"
+        f"🧬 <b>Биология:</b> {characteristics.biology}\n"
+        f"❤️ <b>Здоровье:</b> {characteristics.health}\n"
+        f"🎨 <b>Хобби:</b> {characteristics.hobby}\n"
+        f"🎒 <b>Багаж:</b> {characteristics.luggage}\n"
+        f"📜 <b>Факт:</b> {characteristics.facts}\n"
+        f"😱 <b>Фобия:</b> {characteristics.phobia}\n"
+        f"✨ <b>Талант:</b> {characteristics.talent}\n"
+        f"🏷️ <b>Социальный статус:</b> {characteristics.social_status}"
+    )
 
-        # Удаляем характеристики игрока
-        characteristics = session.query(Characteristic).filter_by(player_id=player.id).first()
-        if characteristics:
-            session.delete(characteristics)
+def _get_achievements_text(player_achievements: List[PlayerAchievement]) -> str:
+    """Формирует и возвращает текст со списком достижений игрока."""
+    if not player_achievements:
+        return "🎖️ У вас пока нет достижений. Первая победа уже близко!"
 
-        session.commit()
+    achievement_lines = []
+    # Сортируем по дате получения
+    for pa in sorted(player_achievements, key=lambda x: x.date_achieved):
+        # Используем данные из уже загруженного объекта Achievement
+        achievement = pa.achievement
+        achievement_lines.append(f"🏅 <b>{achievement.name}</b>: <i>{achievement.description}</i>")
+    
+    return "<b>Ваши достижения:</b>\n\n" + "\n\n".join(achievement_lines)
 
-        bot.send_message(message.chat.id, "🚪 Вы покинули комнату.")
-        for p in room.players:
-            bot.send_message(p.telegram_id, f"👤 Игрок <b>{player.username}</b> покинул комнату.", parse_mode='HTML')
-    except Exception as e:
-        session.rollback()
-        bot.send_message(message.chat.id, "Произошла ошибка при выходе из комнаты.")
-        logging.error(f"Ошибка в handle_leave_room: {e}")
-    finally:
-        session.close()
 
-def handle_rating(bot, message):
-    logging.info(f"Пользователь {message.from_user.id} вызвал команду /rating")
-    session = Session()
-    try:
-        telegram_id = message.from_user.id
-        player = session.query(Player).filter_by(telegram_id=telegram_id).first()
-        if not player:
-            bot.send_message(message.chat.id, "❗ Вы не зарегистрированы. Используйте /start для начала.")
-            return
-        rating_text = f"""
-<b>Ваш рейтинг:</b>
-🏆 <b>Побед:</b> {player.wins}
-💀 <b>Поражений:</b> {player.losses}
-"""
-        bot.send_message(message.chat.id, rating_text, parse_mode='HTML')
-    except Exception as e:
-        bot.send_message(message.chat.id, "Произошла ошибка при получении вашего рейтинга.")
-        logging.error(f"Ошибка в handle_rating: {e}")
-    finally:
-        session.close()
+# --- Обработчики команд ---
 
-def handle_achievements(bot, message):
-    logging.info(f"Пользователь {message.from_user.id} вызвал команду /achievements")
-    session = Session()
-    try:
-        telegram_id = message.from_user.id
-        player = session.query(Player).filter_by(telegram_id=telegram_id).first()
-        if not player:
-            bot.send_message(message.chat.id, "❗ Вы не зарегистрированы. Используйте /start для начала.")
-            return
+@player_in_room_required
+def handle_show_status(bot: TeleBot, message: Message, session: Session, player: Player, room: Room):
+    """
+    Обрабатывает команду /show_status.
+    Показывает игроку его текущие игровые характеристики.
+    """
+    logging.info(f"Игрок {player.username} запросил свои характеристики в комнате {room.code}.")
+    
+    char_text = _get_player_characteristics_text(player)
+    bot.send_message(player.telegram_id, char_text, parse_mode='HTML')
 
-        achievements = session.query(PlayerAchievement).filter_by(player_id=player.id).all()
-        if not achievements:
-            bot.send_message(message.chat.id, "🎖️ У вас пока нет достижений.")
-            return
 
-        achievement_texts = []
-        for pa in achievements:
-            achievement = session.query(Achievement).filter_by(id=pa.achievement_id).first()
-            if achievement:
-                achievement_texts.append(f"🏅 <b>{achievement.name}</b>: {achievement.description}")
+@player_in_room_required
+def handle_leave_room(bot: TeleBot, message: Message, session: Session, player: Player, room: Room):
+    """
+    Обрабатывает команду /leave_room.
+    Позволяет игроку покинуть текущую комнату.
+    """
+    logging.info(f"Игрок {player.username} покидает комнату {room.code}.")
 
-        text = "<b>Ваши достижения:</b>\n" + "\n".join(achievement_texts)
-        bot.send_message(message.chat.id, text, parse_mode='HTML')
-    except Exception as e:
-        bot.send_message(message.chat.id, "Произошла ошибка при получении ваших достижений.")
-        logging.error(f"Ошибка в handle_achievements: {e}")
-    finally:
-        session.close()
+    # Уведомляем остальных игроков
+    notification_text = f"👤 Игрок <b>{player.username}</b> покинул комнату."
+    
+    # Создаем копию списка, так как игрок будет удален из оригинального
+    other_players = [p for p in room.players if p.id != player.id]
+    
+    for p in other_players:
+        try:
+            bot.send_message(p.telegram_id, notification_text, parse_mode='HTML')
+        except APIError as e:
+            logging.warning(f"Не удалось уведомить игрока {p.id} о выходе {player.id}: {e}")
+
+    # Убираем игрока из комнаты
+    player.current_room_id = None
+    
+    # Декоратор сам сделает commit
+    bot.send_message(message.chat.id, "🚪 Вы успешно покинули комнату.")
+
+
+@player_required
+def handle_rating(bot: TeleBot, message: Message, session: Session, player: Player):
+    """
+    Обрабатывает команду /rating.
+    Показывает статистику побед и поражений игрока.
+    """
+    logging.info(f"Игрок {player.username} запросил свой рейтинг.")
+    
+    rating_text = (
+        f"<b>📊 Ваш рейтинг:</b>\n\n"
+        f"🏆 <b>Побед:</b> {player.wins}\n"
+        f"💀 <b>Поражений:</b> {player.losses}"
+    )
+    bot.send_message(message.chat.id, rating_text, parse_mode='HTML')
+
+
+@player_required
+def handle_achievements(bot: TeleBot, message: Message, session: Session, player: Player):
+    """
+    Обрабатывает команду /achievements.
+    Показывает полученные игроком достижения.
+    """
+    logging.info(f"Игрок {player.username} запросил свои достижения.")
+    
+    # Используем joinedload для эффективной загрузки связанных данных об ачивках
+    player_with_achievements = session.query(Player).options(
+        joinedload(Player.achievements).joinedload(PlayerAchievement.achievement)
+    ).filter(Player.id == player.id).one()
+
+    achievements_text = _get_achievements_text(player_with_achievements.achievements)
+    bot.send_message(message.chat.id, achievements_text, parse_mode='HTML')

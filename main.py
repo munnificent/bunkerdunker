@@ -1,120 +1,110 @@
 # main.py
 
 import telebot
+import logging
+import time
+from telebot.types import Message, CallbackQuery
+
 from config import TOKEN
 from database import init_db
 from handlers import (
     start_handler, help_handler, create_room_handler,
     join_room_handler, game_handlers, admin_handlers, chat_handlers
 )
-from telebot.types import Message, CallbackQuery
-import logging
-import time
 
-bot = telebot.TeleBot(TOKEN)
+# --- Инициализация и настройка ---
 
-# Настройка логирования
+# Настройка логирования для отслеживания работы и ошибок бота
 logging.basicConfig(
     filename='bot.log',
     level=logging.INFO,
-    format='%(asctime)s %(levelname)s %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    encoding='utf-8'
 )
 
-# Ограничение частоты команд
-users_last_action = {}
+bot = telebot.TeleBot(TOKEN)
 
-def rate_limit(limit):
+# Словарь для отслеживания времени последнего действия пользователя (для защиты от спама)
+user_last_action = {}
+
+# --- Декораторы и вспомогательные функции ---
+
+def rate_limit(limit_seconds: int):
+    """
+    Декоратор для ограничения частоты вызова команд пользователем.
+    """
     def decorator(func):
-        def wrapper(message, *args, **kwargs):
+        def wrapper(message: Message, *args, **kwargs):
             user_id = message.from_user.id
             current_time = time.time()
-            last_action = users_last_action.get(user_id, 0)
-            if current_time - last_action < limit:
-                bot.send_message(message.chat.id, "⏳ Пожалуйста, не спамьте командами.")
+            last_action_time = user_last_action.get(user_id, 0)
+
+            if current_time - last_action_time < limit_seconds:
+                logging.warning(f"Пользователь {user_id} спамит команду.")
+                bot.send_message(message.chat.id, "⏳ Пожалуйста, не отправляйте команды слишком часто.")
                 return
-            users_last_action[user_id] = current_time
+
+            user_last_action[user_id] = current_time
             return func(message, *args, **kwargs)
         return wrapper
     return decorator
 
-# Инициализация базы данных
-init_db()
+# --- Регистрация обработчиков ---
 
-# Обработчики команд
-@bot.message_handler(commands=['start'])
-@rate_limit(2)
-def handle_start(message: Message):
-    start_handler.handle_start(bot, message)
+# Структура для удобной регистрации всех команд
+COMMAND_HANDLERS = [
+    # Команда, Обработчик, Ограничение частоты (сек)
+    ('start', start_handler.handle_start, 2),
+    ('help', help_handler.handle_help, 2),
+    ('create_room', create_room_handler.handle_create_room, 5),
+    ('join_room', join_room_handler.handle_join_room, 5),
+    ('start_game', admin_handlers.handle_start_game, 10),
+    ('kick', admin_handlers.handle_kick_player, 3),
+    ('stop_game', admin_handlers.handle_stop_game, 10),
+    ('start_discussion', admin_handlers.handle_start_discussion, 5),
+    ('end_discussion', admin_handlers.handle_end_discussion, 5),
+    ('vote', lambda b, m: admin_handlers.handle_vote_command(b, m.chat.id), 5),
+    ('show_status', game_handlers.handle_show_status, 2),
+    ('leave_room', game_handlers.handle_leave_room, 5),
+    ('timer', admin_handlers.handle_timer, 5),
+    ('rating', game_handlers.handle_rating, 2),
+    ('achievements', game_handlers.handle_achievements, 2),
+    ('msg', chat_handlers.handle_send_message, 2),
+    ('pm', chat_handlers.handle_send_private_message, 2),
+]
 
-@bot.message_handler(commands=['help'])
-@rate_limit(2)
-def handle_help(message: Message):
-    help_handler.handle_help(bot, message)
+def register_command_handlers():
+    """Регистрирует все обработчики команд из списка COMMAND_HANDLERS."""
+    for command, handler, rate in COMMAND_HANDLERS:
+        # Применяем декоратор rate_limit и регистрируем обработчик
+        bot.message_handler(commands=[command])(
+            rate_limit(rate)(
+                # Оборачиваем хендлер, чтобы он принимал (bot, message)
+                lambda msg, h=handler: h(bot, msg)
+            )
+        )
 
-@bot.message_handler(commands=['create_room'])
-def handle_create_room(message: Message):
-    create_room_handler.handle_create_room(bot, message)
-
-@bot.message_handler(commands=['join_room'])
-def handle_join_room(message: Message):
-    join_room_handler.handle_join_room(bot, message)
-
-@bot.message_handler(commands=['start_game'])
-def handle_start_game(message: Message):
-    admin_handlers.handle_start_game(bot, message)
-
-@bot.message_handler(commands=['kick'])
-def handle_kick_player(message: Message):
-    admin_handlers.handle_kick_player(bot, message)
-
-@bot.message_handler(commands=['stop_game'])
-def handle_stop_game(message: Message):
-    admin_handlers.handle_stop_game(bot, message)
-
-@bot.message_handler(commands=['start_discussion'])
-def handle_start_discussion(message: Message):
-    admin_handlers.handle_start_discussion(bot, message)
-
-@bot.message_handler(commands=['end_discussion'])
-def handle_end_discussion(message: Message):
-    admin_handlers.handle_end_discussion(bot, message)
-
-@bot.message_handler(commands=['vote'])
-def handle_vote_command(message: Message):
-    admin_handlers.handle_vote_command(bot, message.chat.id)
-
+# Обработчик для кнопок голосования
 @bot.callback_query_handler(func=lambda call: call.data.startswith('vote_'))
 def handle_vote_callback(call: CallbackQuery):
     admin_handlers.handle_vote_callback(bot, call)
 
-@bot.message_handler(commands=['show_status'])
-def handle_show_status(message: Message):
-    game_handlers.handle_show_status(bot, message)
+# Глобальный обработчик ошибок для повышения стабильности бота
+@bot.exception_handler
+def handle_errors(exception: Exception):
+    logging.error(f"Произошла ошибка: {exception}", exc_info=True)
+    # В реальном проекте можно добавить отправку уведомления администратору
+    return True # Продолжаем работу
 
-@bot.message_handler(commands=['leave_room'])
-def handle_leave_room(message: Message):
-    game_handlers.handle_leave_room(bot, message)
-
-@bot.message_handler(commands=['timer'])
-def handle_timer(message: Message):
-    admin_handlers.handle_timer(bot, message)
-
-@bot.message_handler(commands=['rating'])
-def handle_rating(message: Message):
-    game_handlers.handle_rating(bot, message)
-
-@bot.message_handler(commands=['achievements'])
-def handle_achievements(message: Message):
-    game_handlers.handle_achievements(bot, message)
-
-@bot.message_handler(commands=['msg'])
-def handle_send_message_command(message: Message):
-    chat_handlers.handle_send_message(bot, message)
-
-@bot.message_handler(commands=['pm'])
-def handle_send_private_message_command(message: Message):
-    chat_handlers.handle_send_private_message(bot, message)
+# --- Запуск бота ---
 
 if __name__ == '__main__':
-    print("Бот запущен...")
-    bot.polling(none_stop=True)
+    try:
+        init_db()
+        register_command_handlers()
+        print("Бот успешно запущен...")
+        logging.info("Бот запущен.")
+        bot.polling(non_stop=True, interval=1)
+    except Exception as e:
+        print(f"Ошибка при запуске бота: {e}")
+        logging.critical(f"Критическая ошибка при запуске бота: {e}", exc_info=True)
