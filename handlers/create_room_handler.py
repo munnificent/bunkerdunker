@@ -17,9 +17,6 @@ from utils.game_utils import generate_unique_room_code
 def player_required(func):
     """
     Декоратор для получения или создания игрока и управления сессией БД.
-    - Находит игрока по telegram_id или создает нового.
-    - Передает в функцию bot, message, session и player.
-    - Управляет жизненным циклом сессии.
     """
     @wraps(func)
     def wrapper(bot: TeleBot, message: Message, *args, **kwargs):
@@ -32,10 +29,9 @@ def player_required(func):
             if not player:
                 player = Player(telegram_id=telegram_id, username=username)
                 session.add(player)
-                session.commit() # Сохраняем игрока сразу, чтобы получить его ID
+                session.commit()
                 logging.info(f"Создан новый игрок: {username} ({telegram_id}).")
 
-            # Вызываем основную функцию
             result = func(bot, message, session, player, *args, **kwargs)
             session.commit()
             return result
@@ -55,7 +51,6 @@ def player_required(func):
 def handle_create_room(bot: TeleBot, message: Message, session: Session, player: Player):
     """
     Обрабатывает команду /create_room.
-    Создает новую игровую комнату и назначает автора команды хостом.
     """
     logging.info(f"Игрок {player.username} ({player.id}) создает новую комнату.")
 
@@ -63,24 +58,24 @@ def handle_create_room(bot: TeleBot, message: Message, session: Session, player:
         bot.send_message(message.chat.id, "❗ Вы уже находитесь в комнате. Сначала покиньте ее с помощью /leave_room.")
         return
 
-    # Все операции выполняются в одной сессии, управляемой декоратором
     room_code = generate_unique_room_code(session)
 
+    # ИСПРАВЛЕНИЕ: Создаем комнату и сразу же добавляем ее в сессию.
     new_room = Room(
         code=room_code,
-        host=player,
+        host_id=player.id, # Присваиваем ID напрямую
         max_players=DEFAULT_MAX_PLAYERS,
         survivors=DEFAULT_SURVIVORS
     )
-    
-    # Добавляем игрока в комнату и обновляем его статус
-    new_room.players.append(player)
-    player.current_room_id = new_room.id # SQLAlchemy свяжет это после коммита
-
     session.add(new_room)
     
-    # Финальный commit всех изменений будет выполнен в декораторе
+    # ИСПРАВЛЕНИЕ: Делаем flush, чтобы получить ID новой комнаты.
+    # Это позволит нам безопасно установить связь с игроком.
+    session.flush()
 
+    player.current_room_id = new_room.id
+    
+    # Финальный commit всех изменений будет выполнен в декораторе
     bot.send_message(
         message.chat.id,
         f"🚪 Комната успешно создана!\n\n"

@@ -13,58 +13,55 @@ Base = declarative_base()
 class Player(Base):
     """
     Модель, представляющая игрока.
-    Хранит информацию о пользователе Telegram, его статистику и текущее состояние в игре.
     """
     __tablename__ = 'players'
 
     id = Column(Integer, primary_key=True)
-    telegram_id = Column(Integer, unique=True, index=True, nullable=False, doc="Уникальный идентификатор пользователя в Telegram")
-    username = Column(String, nullable=False, doc="Имя пользователя в Telegram")
-    wins = Column(Integer, default=0, doc="Количество побед")
-    losses = Column(Integer, default=0, doc="Количество поражений")
+    telegram_id = Column(Integer, unique=True, index=True, nullable=False)
+    username = Column(String, nullable=False)
+    wins = Column(Integer, default=0)
+    losses = Column(Integer, default=0)
     
-    # Связь с текущей комнатой игрока
-    current_room_id = Column(Integer, ForeignKey('rooms.id'), index=True, doc="ID комнаты, в которой находится игрок")
+    current_room_id = Column(Integer, ForeignKey('rooms.id'), index=True)
+    
+    # Связь с комнатой, в которой игрок является участником
     room = relationship("Room", back_populates="players", foreign_keys=[current_room_id])
 
-    # Отношение "один-к-одному" с характеристиками
+    # Связи для характеристик, достижений и сообщений
     characteristics = relationship("Characteristic", uselist=False, back_populates="player", cascade="all, delete-orphan")
-    
-    # Отношение "один-ко-многим" с достижениями
     achievements = relationship("PlayerAchievement", back_populates="player", cascade="all, delete-orphan")
-    
-    # Связи для отправленных и полученных сообщений
     sent_messages = relationship("Message", foreign_keys='Message.sender_id', back_populates="sender")
     received_messages = relationship("Message", foreign_keys='Message.recipient_id', back_populates="recipient")
 
 class Room(Base):
     """
     Модель, представляющая игровую комнату.
-    Содержит информацию о комнате, ее участниках и состоянии игры.
     """
     __tablename__ = 'rooms'
 
     id = Column(Integer, primary_key=True)
-    code = Column(String, unique=True, index=True, nullable=False, doc="Уникальный код для присоединения к комнате")
-    host_id = Column(Integer, ForeignKey('players.id'), nullable=False, doc="ID игрока, который является хостом комнаты")
-    is_active = Column(Boolean, default=True, doc="Активна ли комната в данный момент")
-    is_voting = Column(Boolean, default=False, doc="Идет ли в комнате голосование")
-    max_players = Column(Integer, default=15, doc="Максимальное количество игроков")
-    survivors = Column(Integer, default=2, doc="Количество выживших для завершения игры")
+    code = Column(String, unique=True, index=True, nullable=False)
+    host_id = Column(Integer, ForeignKey('players.id'), nullable=False)
+    is_active = Column(Boolean, default=True)
+    is_voting = Column(Boolean, default=False)
+    max_players = Column(Integer, default=15)
+    survivors = Column(Integer, default=2)
     
-    # Связь с локацией (катастрофой)
-    location_id = Column(Integer, ForeignKey('locations.id'), doc="ID текущей локации/катастрофы")
-    location = relationship("Location", back_populates="rooms")
+    location_id = Column(Integer, ForeignKey('locations.id'))
     
-    # Связь с хостом комнаты
-    host = relationship("Player", foreign_keys=[host_id], backref="hosted_rooms")
+    # ИСПРАВЛЕНИЕ 1: Связь с хостом. back_populates указывает на новое отношение в Player.
+    host = relationship("Player", foreign_keys=[host_id], backref="hosted_room", uselist=False)
     
-    # Игроки в комнате
+    # ИСПРАВЛЕНИЕ 2: Связь с игроками. Указывает SQLAlchemy, как найти игроков.
     players = relationship("Player", back_populates="room", foreign_keys=[Player.current_room_id])
     
-    # Связанные сообщения и голоса (удаляются вместе с комнатой)
+    location = relationship("Location", back_populates="rooms")
     messages = relationship("Message", back_populates="room", cascade="all, delete-orphan")
     votes = relationship("Vote", back_populates="room", cascade="all, delete-orphan")
+
+
+# ... (остальные модели остаются без изменений)
+
 
 class Characteristic(Base):
     """

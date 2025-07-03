@@ -1,6 +1,6 @@
 # config.py
 
-TOKEN = ' ' # Замените на токен вашего бота
+TOKEN = ''  # Замените на токен вашего бота
 DATABASE_NAME = 'bunker_game.db'
 
 # Настройки игры
