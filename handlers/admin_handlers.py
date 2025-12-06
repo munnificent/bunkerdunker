@@ -188,7 +188,7 @@ def _handle_vote_results(bot: TeleBot, room: Room, session: Session):
     excluded_player = session.query(Player).get(players_with_max_votes[0])
     
     # Показываем характеристики исключенного игрока
-    char_text = f"<b>Характеристики исключенного игрока {excluded_player.username}:</b>\n" + format_player_characteristics(excluded_player).replace("<b>Ваши характеристики:</b>\n", "")
+    char_text = format_player_characteristics(excluded_player, title=f"Характеристики исключенного игрока {excluded_player.username}:")
     broadcast_message(bot, room.players, char_text, parse_mode='HTML')
     
     excluded_player.current_room_id = None
