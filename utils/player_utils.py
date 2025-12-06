@@ -3,19 +3,22 @@
 from models import Player
 
 
-def format_player_characteristics(player: Player, title: str = None) -> str:
+def format_player_characteristics(player: Player, title: str = None, include_username: bool = False) -> str:
     """
     Формирует и возвращает отформатированный текст с характеристиками игрока.
     
     Args:
         player: Объект игрока с характеристиками.
         title: Заголовок для отображения (если None, используется "Ваши характеристики:").
+        include_username: Включить имя игрока в заголовок.
         
     Returns:
         Отформатированная строка с характеристиками игрока в HTML формате.
     """
     characteristics = player.characteristics
     if not characteristics:
+        if include_username:
+            return f"❗ У игрока <b>{player.username}</b> нет характеристик."
         return "❗ У вас пока нет характеристик. Их выдадут в начале игры."
 
     if title is None:
