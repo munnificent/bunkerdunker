@@ -3,11 +3,11 @@
 import logging
 from telebot import TeleBot
 from telebot.types import Message
-
-# Импортируем уже созданный декоратор для переиспользования кода
-from handlers.create_room_handler import player_required
-from models import Player, Room
 from sqlalchemy.orm import Session
+
+from models import Player, Room
+from utils.decorators import player_required
+from utils.messaging_utils import broadcast_to_room_except_sender
 
 # --- Обработчик команды ---
 
@@ -50,12 +50,7 @@ def handle_join_room(bot: TeleBot, message: Message, session: Session, player: P
     
     # Уведомляем всех в комнате о новом игроке
     notification_text = f"👤 Игрок <b>{player.username}</b> присоединился к комнате!"
-    for p in room.players:
-        if p.id != player.id:
-            try:
-                bot.send_message(p.telegram_id, notification_text, parse_mode='HTML')
-            except Exception as e: # <-- Заменено на общее исключение
-                logging.warning(f"Не удалось уведомить игрока {p.id} о входе {player.id}: {e}")
+    broadcast_to_room_except_sender(bot, player, room.players, notification_text, parse_mode='HTML')
 
     bot.send_message(message.chat.id, f"✅ Вы успешно присоединились к комнате <code>{room_code}</code>!", parse_mode='HTML')
     logging.info(f"Игрок {player.username} присоединился к комнате {room.code}.")
