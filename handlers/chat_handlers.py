@@ -1,70 +1,14 @@
 # handlers/chat_handlers.py
 
 import logging
-from functools import wraps
-from typing import List
 
 from sqlalchemy.orm import Session
 from telebot import TeleBot
 from telebot.types import Message
 
-from database import Session as DbSession
 from models import Player, Room, Message as MessageModel
-
-# --- Вспомогательные функции и декораторы ---
-
-def player_in_room_required(func):
-    """
-    Декоратор для проверки, находится ли игрок в активной комнате.
-    - Управляет сессией БД (commit, rollback, close).
-    - Выполняет все стандартные проверки игрока и комнаты.
-    - Передает в функцию bot, message, session, player и room.
-    """
-    @wraps(func)
-    def wrapper(bot: TeleBot, message: Message, *args, **kwargs):
-        session = DbSession()
-        try:
-            player = session.query(Player).filter_by(telegram_id=message.from_user.id).first()
-
-            if not player:
-                bot.send_message(message.chat.id, "❗ Вы не зарегистрированы. Используйте /start.")
-                return
-
-            if not player.current_room_id:
-                bot.send_message(message.chat.id, "❗ Вы не находитесь в игровой комнате.")
-                return
-            
-            room = session.query(Room).filter_by(id=player.current_room_id, is_active=True).first()
-
-            if not room:
-                 bot.send_message(message.chat.id, "❗ Комната, в которой вы были, больше не активна.")
-                 player.current_room_id = None
-                 session.commit()
-                 return
-            
-            # Вызываем основную функцию
-            result = func(bot, message, session, player, room, *args, **kwargs)
-            session.commit()
-            return result
-
-        except Exception as e:
-            logging.error(f"Ошибка в команде игрока '{func.__name__}': {e}", exc_info=True)
-            session.rollback()
-            bot.send_message(message.chat.id, "❌ Произошла непредвиденная ошибка при выполнении команды.")
-        finally:
-            session.close()
-
-    return wrapper
-
-def _broadcast_to_room(bot: TeleBot, sender: Player, room: Room, text: str):
-    """Отправляет сообщение всем игрокам в комнате, кроме отправителя."""
-    full_message = f"💬 <b>{sender.username}:</b> {text}"
-    for p in room.players:
-        if p.id != sender.id:
-            try:
-                bot.send_message(p.telegram_id, full_message, parse_mode='HTML')
-            except Exception as e: # <-- Заменено на общее исключение
-                logging.error(f"Не удалось отправить сообщение игроку {p.id} ({p.username}): {e}")
+from utils.decorators import player_in_room_required
+from utils.messaging_utils import broadcast_to_room_except_sender
 
 # --- Обработчики команд ---
 
@@ -86,7 +30,8 @@ def handle_send_message(bot: TeleBot, message: Message, session: Session, player
     session.add(new_message)
 
     # Рассылаем сообщение другим игрокам
-    _broadcast_to_room(bot, player, room, text)
+    full_message = f"💬 <b>{player.username}:</b> {text}"
+    broadcast_to_room_except_sender(bot, player, room.players, full_message, parse_mode='HTML')
     bot.send_message(message.chat.id, "✅ Сообщение отправлено всем игрокам в комнате.")
 
 @player_in_room_required

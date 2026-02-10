@@ -1,39 +1,16 @@
 # handlers/game_handlers.py
 
 import logging
-from functools import wraps
 from typing import List
 
 from sqlalchemy.orm import Session, joinedload
 from telebot import TeleBot
 from telebot.types import Message
 
-# Импортируем декораторы из других модулей, чтобы не дублировать код
-from handlers.create_room_handler import player_required
-from handlers.chat_handlers import player_in_room_required
 from models import Player, Room, Characteristic, PlayerAchievement
-
-
-# --- Вспомогательные функции ---
-
-def _get_player_characteristics_text(player: Player) -> str:
-    """Формирует и возвращает текст с характеристиками игрока."""
-    characteristics = player.characteristics
-    if not characteristics:
-        return "❗ У вас пока нет характеристик. Их выдадут в начале игры."
-
-    return (
-        f"<b>Ваши текущие характеристики:</b>\n\n"
-        f"👤 <b>Профессия:</b> {characteristics.profession}\n"
-        f"🧬 <b>Биология:</b> {characteristics.biology}\n"
-        f"❤️ <b>Здоровье:</b> {characteristics.health}\n"
-        f"🎨 <b>Хобби:</b> {characteristics.hobby}\n"
-        f"🎒 <b>Багаж:</b> {characteristics.luggage}\n"
-        f"📜 <b>Факт:</b> {characteristics.facts}\n"
-        f"😱 <b>Фобия:</b> {characteristics.phobia}\n"
-        f"✨ <b>Талант:</b> {characteristics.talent}\n"
-        f"🏷️ <b>Социальный статус:</b> {characteristics.social_status}"
-    )
+from utils.decorators import player_required, player_in_room_required
+from utils.player_utils import format_player_characteristics
+from utils.messaging_utils import broadcast_to_room_except_sender
 
 def _get_achievements_text(player_achievements: List[PlayerAchievement]) -> str:
     """Формирует и возвращает текст со списком достижений игрока."""
@@ -60,7 +37,7 @@ def handle_show_status(bot: TeleBot, message: Message, session: Session, player:
     """
     logging.info(f"Игрок {player.username} запросил свои характеристики в комнате {room.code}.")
     
-    char_text = _get_player_characteristics_text(player)
+    char_text = format_player_characteristics(player)
     bot.send_message(player.telegram_id, char_text, parse_mode='HTML')
 
 
@@ -74,15 +51,7 @@ def handle_leave_room(bot: TeleBot, message: Message, session: Session, player: 
 
     # Уведомляем остальных игроков
     notification_text = f"👤 Игрок <b>{player.username}</b> покинул комнату."
-    
-    # Создаем копию списка, так как игрок будет удален из оригинального
-    other_players = [p for p in room.players if p.id != player.id]
-    
-    for p in other_players:
-        try:
-            bot.send_message(p.telegram_id, notification_text, parse_mode='HTML')
-        except Exception as e: # <-- Заменено на общее исключение
-            logging.warning(f"Не удалось уведомить игрока {p.id} о выходе {player.id}: {e}")
+    broadcast_to_room_except_sender(bot, player, room.players, notification_text, parse_mode='HTML')
 
     # Убираем игрока из комнаты
     player.current_room_id = None

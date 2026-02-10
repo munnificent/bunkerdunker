@@ -1,49 +1,15 @@
 # handlers/create_room_handler.py
 
 import logging
-from functools import wraps
 
 from sqlalchemy.orm import Session
 from telebot import TeleBot
 from telebot.types import Message
 
 from config import DEFAULT_MAX_PLAYERS, DEFAULT_SURVIVORS
-from database import Session as DbSession
 from models import Player, Room
 from utils.game_utils import generate_unique_room_code
-
-# --- Декораторы ---
-
-def player_required(func):
-    """
-    Декоратор для получения или создания игрока и управления сессией БД.
-    """
-    @wraps(func)
-    def wrapper(bot: TeleBot, message: Message, *args, **kwargs):
-        session = DbSession()
-        try:
-            telegram_id = message.from_user.id
-            username = message.from_user.username or message.from_user.first_name
-
-            player = session.query(Player).filter_by(telegram_id=telegram_id).first()
-            if not player:
-                player = Player(telegram_id=telegram_id, username=username)
-                session.add(player)
-                session.commit()
-                logging.info(f"Создан новый игрок: {username} ({telegram_id}).")
-
-            result = func(bot, message, session, player, *args, **kwargs)
-            session.commit()
-            return result
-
-        except Exception as e:
-            logging.error(f"Ошибка в команде '{func.__name__}': {e}", exc_info=True)
-            session.rollback()
-            bot.send_message(message.chat.id, "❌ Произошла непредвиденная ошибка при выполнении команды.")
-        finally:
-            session.close()
-
-    return wrapper
+from utils.decorators import player_required
 
 # --- Обработчик команды ---
 

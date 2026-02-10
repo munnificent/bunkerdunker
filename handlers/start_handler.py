@@ -5,9 +5,8 @@ from telebot import TeleBot
 from telebot.types import Message
 from sqlalchemy.orm import Session
 
-# Импортируем уже созданный декоратор для переиспользования кода
-from handlers.create_room_handler import player_required
 from models import Player
+from utils.decorators import player_required
 
 
 # --- Обработчик команды ---
